@@ -2,8 +2,8 @@
 //  AppDelegate.swift
 //  DarkSkyWeather
 //
-//  Created by Ghouse Basha Shaik on 08/12/17.
-//  Copyright © 2017 Ghouse. All rights reserved.
+//  Created by Ratheesh Konkala on 12/07/17.
+//  Copyright © 2017 Ratheesh Konkala. All rights reserved.
 //
 
 import UIKit
@@ -13,7 +13,6 @@ import CoreData
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
-
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplicationLaunchOptionsKey: Any]?) -> Bool {
         return true

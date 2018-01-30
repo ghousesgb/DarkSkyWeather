@@ -2,26 +2,62 @@
 //  ViewController.swift
 //  DarkSkyWeather
 //
-//  Created by Ghouse Basha Shaik on 08/12/17.
-//  Copyright © 2017 Ghouse. All rights reserved.
+//  Created by Ratheesh Konkala on 12/07/17.
+//  Copyright © 2017 Ratheesh Konkala. All rights reserved.
 //
 
 import UIKit
+import CoreLocation
 
 class HomeViewController: UIViewController {
-    @IBOutlet weak var timeZone: UILabel!
+    @IBOutlet weak var locationLabel: UILabel!
     @IBOutlet weak var currentDateTime: UILabel!
     @IBOutlet weak var currentSummary: UILabel!
     @IBOutlet weak var currentTemperature: UILabel!
     @IBOutlet weak var tempTableView: UITableView!
+    @IBOutlet weak var sunraiseLabel: UILabel!
+    @IBOutlet weak var sunsetLabel: UILabel!
+    @IBOutlet weak var searchTextField: UITextField!
     
+    @IBOutlet weak var windSpeedLabel: UILabel!
     fileprivate var weather: Weather?
+    fileprivate var otherInfo: OtherInfo?
+    
+    fileprivate var latitude: Double?
+    fileprivate var longitude: Double?
+    fileprivate var location: String?
+    
+    fileprivate var locationManager = CLLocationManager()
+    
     override func viewDidLoad() {
         super.viewDidLoad()
+       self.enableLocationServices()
+    }
+    
+    fileprivate func featchWeatherForecast() {
+        
         //Creating url string with hardcoded lat and lng
-        let jsonURLString = BASE_URL + "37.8267,-122.4233"
+        let parameters = String(format:"lat=%f&lon=%f&APPID=%@",self.latitude!,self.longitude!,OPEN_WEATHER_APIKEY)
+        let urlString = OTHER_BASE_URL + parameters
+        guard let compURL = URL(string:urlString) else {return}
+        //Making a DarkSky API Call
+        
+        URLSession.shared.dataTask(with: compURL) { (data, response, err) in
+            guard let data = data else {return}
+            do {
+                //Decoding using JSONDecoder
+                self.otherInfo = try JSONDecoder().decode(OtherInfo.self, from: data)
+                self.buildSunRaiseSetUI()
+            }catch let jsonErr {
+                print("Error descrption ", jsonErr)
+            }
+            }.resume()
+        
+        //Creating url string with hardcoded lat and lng
+        let latLngString = String(format:"%f,%f",self.latitude!,self.longitude!)
+        let jsonURLString = BASE_URL + latLngString
         guard let URL = URL(string:jsonURLString) else {return}
-        //Making a API Call
+        //Making a DarkSky API Call
         URLSession.shared.dataTask(with: URL) { (data, response, err) in
             guard let data = data else {return}
             do {
@@ -34,15 +70,21 @@ class HomeViewController: UIViewController {
             }catch let jsonErr {
                 print("Error descrption ", jsonErr)
             }
-        }.resume()
+            }.resume()
+    }
+    
+    //Preparing SunRise and set UI
+    fileprivate func buildSunRaiseSetUI() {
+        DispatchQueue.main.async {[unowned self] in
+            self.windSpeedLabel.text    =   self.otherInfo?.wind.formattedSpeed
+            self.sunraiseLabel.text     =   self.otherInfo?.sys.formattedSunRise
+            self.sunsetLabel.text       =   self.otherInfo?.sys.formattedSunSet
+        }
     }
     //Preparing UI
     fileprivate func buildUI() {
         DispatchQueue.main.async {[unowned self] in
             if let weather = self.weather {
-                if let timezone = weather.timezone {
-                    self.timeZone.text = timezone
-                }
                 if let summary = weather.currently.summary {
                     self.currentSummary.text = summary
                 }
@@ -52,7 +94,7 @@ class HomeViewController: UIViewController {
         }
         self.saveData()
     }
-    //Saving the Date as a backup into CoreData.
+    //Saving the Data as a backup into CoreData.
     //Basically it is not need to save this data, as everytime we open the app we get new/refresh data.
     //So no point of having database for this app.
     fileprivate func saveData() {
@@ -60,7 +102,7 @@ class HomeViewController: UIViewController {
         todayWeatherRecord.datetime     =    (self.weather?.currently.time)!
         todayWeatherRecord.summary      =    self.weather?.currently.summary
         todayWeatherRecord.temperature  =    (self.weather?.currently.temperature)!
-        todayWeatherRecord.location     =   self.weather?.timezone
+        todayWeatherRecord.location     =    self.weather?.timezone
         
         for weekRecrod in (self.weather?.daily.data)! {
             let otherWeatherRecord = OtherDayWeather(context: StorageManager.context)
@@ -70,6 +112,32 @@ class HomeViewController: UIViewController {
             otherWeatherRecord.summary  =   weekRecrod.summary!
         }
         StorageManager.saveContext()
+    }
+    @IBAction func searchButtonAction(_ sender: UIButton) {
+        guard let searchString = searchTextField.text, searchString.count > 3 else {
+            self.showAlert(message: "Invalid search name")
+            return
+        }
+        searchTextField.text = ""
+        let geocoder = CLGeocoder()
+        geocoder.geocodeAddressString(searchString) { (placemarks, error) in
+            if let placemark = placemarks?.first {
+                self.latitude  = placemark.location?.coordinate.latitude
+                self.longitude = placemark.location?.coordinate.longitude
+                self.locationLabel.text   = placemark.country! + "\n" + placemark.name!
+                self.featchWeatherForecast()
+            }else {
+               self.showAlert(message: "could't search address")
+            }
+        }
+    }
+    
+    fileprivate func showAlert(message: String) {
+        let alert = UIAlertController(title: "Information", message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+        DispatchQueue.main.async {[unowned self] in
+         self.present(alert, animated: true, completion: nil)
+        }
     }
 }
 
@@ -92,5 +160,54 @@ extension HomeViewController: UITableViewDelegate {
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
         return 65.0
     }
+}
+
+extension HomeViewController: CLLocationManagerDelegate{
+    func enableLocationServices() {
+        self.locationManager.delegate = self
+        switch CLLocationManager.authorizationStatus() {
+        case .notDetermined:
+            // Request when-in-use authorization initially
+            self.locationManager.requestWhenInUseAuthorization()
+            break
+            
+        case .restricted, .denied:
+            // Disable location features
+            print("restricted/denied")
+            break
+            
+        case .authorizedWhenInUse:
+            // Enable basic location features
+            self.locationManager.startUpdatingLocation()
+            break
+        case .authorizedAlways:
+            print("always")
+        }
+    }
+    func locationManager(_ manager: CLLocationManager, didChangeAuthorization status: CLAuthorizationStatus)
+    {
+        if status == CLAuthorizationStatus.authorizedAlways || status == CLAuthorizationStatus.authorizedWhenInUse
+        {
+            self.locationManager.startUpdatingLocation()
+        }
+    }
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        // get last location
+        self.locationManager.stopUpdatingLocation()
+        let location = locations.last
+        self.latitude  = location?.coordinate.latitude
+        self.longitude = location?.coordinate.longitude
+        self.featchWeatherForecast()
+        // Create Location
+        let geolocation = CLLocation(latitude: self.latitude!, longitude: self.longitude!)
+        let geocoder = CLGeocoder()
+        // Geocode Location
+        geocoder.reverseGeocodeLocation(geolocation) { (placemarks, error) in
+             if let placemark = placemarks?.first {
+                self.locationLabel.text   = placemark.country! + "\n" + placemark.name!
+            }
+        }
+    }
+
 }
 

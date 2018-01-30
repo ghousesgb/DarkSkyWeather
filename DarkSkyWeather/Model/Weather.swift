@@ -2,8 +2,8 @@
 //  Weather.swift
 //  DarkSkyWeather
 //
-//  Created by Ghouse Basha Shaik on 08/12/17.
-//  Copyright © 2017 Ghouse. All rights reserved.
+//  Created by Ratheesh Konkala on 12/07/17.
+//  Copyright © 2017 Ratheesh Konkala. All rights reserved.
 //
 
 import Foundation
